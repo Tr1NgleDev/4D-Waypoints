@@ -1,4 +1,4 @@
-#define DEBUG_CONSOLE // Uncomment this if you want a debug console to start. You can use the Console class to print. You can use Console::inStrings to get input.
+//#define DEBUG_CONSOLE // Uncomment this if you want a debug console to start. You can use the Console class to print. You can use Console::inStrings to get input.
 
 #include <fstream>
 
@@ -13,16 +13,6 @@ using namespace fdm::gui;
 initDLL
 
 #include "StateWaypointsMenu.h"
-
-void saveWaypoints()
-{
-    std::ofstream waypointsFile("waypoints.json");
-    if (!waypointsFile.is_open()) return;
-
-    nlohmann::json waypoints = StateWaypointsMenu::waypoints;
-    waypointsFile << waypoints.dump(4);
-    waypointsFile.close();
-}
 
 StateManager* stateManager = nullptr;
 
@@ -58,7 +48,7 @@ void createWaypointBind(GLFWwindow* window, int action, int mods)
     if (action == GLFW_PRESS)
     {
         openWaypoints(nullptr);
-        StateWaypointsMenu::instanceObj.openCreateWaypointMenu();
+        StateWaypointsMenu::instanceObj.openCreateWaypointMenu(nullptr);
     }
 }
 
@@ -300,9 +290,25 @@ $hook(void, StateIntro, init, StateManager& s)
 	glfwInit();
 }
 
+$hook(bool, Player, keyInput, GLFWwindow* window, World* world, int key, int scancode, int action, int mods)
+{
+    if (!KeyBinds::isLoaded()) // if no 4DKeyBinds mod
+    {
+        if (key == GLFW_KEY_C && action == GLFW_PRESS)
+            toggleWaypoints(window, action, mods);
+        else if (key == GLFW_KEY_V && action == GLFW_PRESS)
+            toggleWaypointsCoords(window, action, mods);
+        else if (key == GLFW_KEY_B && action == GLFW_PRESS)
+            createWaypointBind(window, action, mods);
+        else if (key == GLFW_KEY_N && action == GLFW_PRESS)
+            openWaypointsMenuBind(window, action, mods);
+    }
+
+    return original(self, window, world, key, scancode, action, mods);
+}
+
 $exec
 {
-    Sleep(5000);
     KeyBinds::addBind("4D-Waypoints", "Toggle Waypoints", glfw::Keys::C, KeyBindsScope::PLAYER, toggleWaypoints);
     KeyBinds::addBind("4D-Waypoints", "Toggle Waypoint Coords", glfw::Keys::V, KeyBindsScope::PLAYER, toggleWaypointsCoords);
     KeyBinds::addBind("4D-Waypoints", "Create a Waypoint", glfw::Keys::B, KeyBindsScope::PLAYER, createWaypointBind);
@@ -323,7 +329,7 @@ $exec
     }
     else
     {
-        saveWaypoints();
+        StateWaypointsMenu::saveWaypoints();
     }
     
 }

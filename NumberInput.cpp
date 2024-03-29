@@ -1,29 +1,15 @@
 #include "NumberInput.h"
 
-NumberInput::NumberInput(const std::string& title, bool floatingPointInput) : title(title), floatingPointInput(floatingPointInput)
+NumberInput::NumberInput(bool floatingPointInput) : floatingPointInput(floatingPointInput)
 {
-	titleText = Text{};
-	titleText.size = 2;
-	titleText.shadow = true;
-	titleText.setText(title);
-	titleText.color.a = 0.9f;
-
-	width = 80;
+	width = 150;
 	height = 40;
-}
-
-void NumberInput::render(gui::Window* w)
-{
-	titleText.xOffset = xOffset - 16;
-	titleText.yOffset = yOffset;
-	titleText.render(w);
-
-	TextInput::render(w);
 }
 
 bool NumberInput::charInput(const gui::Window* w, uint32_t codepoint)
 {
 	std::string oldText = text;
+	int oldCursorPos = cursorPos;
 	int point = text.find('.');
 	bool result = false;
 
@@ -34,16 +20,22 @@ bool NumberInput::charInput(const gui::Window* w, uint32_t codepoint)
 		result = TextInput::charInput(w, codepoint);
 	else return result;
 
+	if (text == "-")
+		return result;
+
+
 	// moved the floating point
 	if (point != std::string::npos && codepoint == '.' && floatingPointInput)
+	{
 		text.erase(point, 1);
-
+		cursorPos--;
+	}
 	// check if its actually a proper motehrfuckigjmdf integer (or float, based on the mode) now
 	char* p;
 	if (!floatingPointInput)
 	{
 		int64_t int64t = _strtoi64(text.c_str(), &p, 10);
-		if (*p) { text = oldText; return result; }
+		if (*p) { text = oldText; cursorPos = oldCursorPos;  return result; }
 
 		if (int64t >= maxValue)
 			text = std::to_string(maxValue);
@@ -55,7 +47,7 @@ bool NumberInput::charInput(const gui::Window* w, uint32_t codepoint)
 	else
 	{
 		double doubl = strtod(text.c_str(), &p);
-		if (*p) { text = oldText; return result; }
+		if (*p) { text = oldText; cursorPos = oldCursorPos;  return result; }
 
 		if (doubl >= maxValue)
 			text = std::to_string(maxValue);
@@ -68,17 +60,21 @@ bool NumberInput::charInput(const gui::Window* w, uint32_t codepoint)
 bool NumberInput::keyInput(const gui::Window* w, int key, int scancode, int action, int mods)
 {
 	std::string oldText = text;
+	int oldCursorPos = cursorPos;
 
-	TextInput::keyInput(w, key, scancode, action, mods);
+	bool a = TextInput::keyInput(w, key, scancode, action, mods);
 
 	// check if its actually a proper motehrfuckigjmdf integer (or float, based on the mode) now
+
+	if (text == "-")
+		return a;
 
 	char* p;
 	if (!floatingPointInput)
 		_strtoi64(text.c_str(), &p, 10);
 	else
 		strtod(text.c_str(), &p);
-	if (*p) text = oldText;
+	if (*p) { text = oldText; cursorPos = oldCursorPos; }
 }
 
 int NumberInput::getInt() 

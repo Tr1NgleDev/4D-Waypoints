@@ -1,7 +1,19 @@
 #include "StateWaypointsMenu.h"
 
+#include <fstream>
+
 using namespace fdm;
 using namespace fdm::gui;
+
+void StateWaypointsMenu::saveWaypoints()
+{
+    std::ofstream waypointsFile("waypoints.json");
+    if (!waypointsFile.is_open()) return;
+
+    nlohmann::json waypoints = StateWaypointsMenu::waypoints;
+    waypointsFile << waypoints.dump(4);
+    waypointsFile.close();
+}
 
 void StateWaypointsMenu::closeBtnCallback(void* user)
 {
@@ -9,6 +21,14 @@ void StateWaypointsMenu::closeBtnCallback(void* user)
 
     StateWaypointsMenu::waypointsMenuOpen = false;
     sm->popState();
+    saveWaypoints();
+}
+
+void StateWaypointsMenu::cancelBtnCallback(void* user)
+{
+    StateWaypointsMenu::instanceObj.ui = &StateWaypointsMenu::instanceObj.mainUI;
+    StateWaypointsMenu::instanceObj.editing = false;
+    saveWaypoints();
 }
 
 void StateWaypointsMenu::updateProjection(const glm::ivec2& size, const glm::ivec2& translate2D)
@@ -29,9 +49,66 @@ void StateWaypointsMenu::updateProjection(const glm::ivec2& size, const glm::ive
     glUniformMatrix4fv(glGetUniformLocation(quadShader->id(), "P"), 1, GL_FALSE, &proj2D[0][0]);
 }
 
-void StateWaypointsMenu::openCreateWaypointMenu()
+void StateWaypointsMenu::removeWaypointCallback(void* user)
 {
-    ui = &createUI;
+    waypoints[curWorld].erase(((WaypointElement*)user)->it);
+    StateWaypointsMenu::instanceObj.createWaypointElems();
+}
+
+void StateWaypointsMenu::createWaypointCallback(void* user)
+{
+    if (StateWaypointsMenu::instanceObj.editing)
+    {
+        StateWaypointsMenu::instanceObj.editIterator->position.x = StateWaypointsMenu::instanceObj.xInput.getFloat();
+        StateWaypointsMenu::instanceObj.editIterator->position.y = StateWaypointsMenu::instanceObj.yInput.getFloat();
+        StateWaypointsMenu::instanceObj.editIterator->position.z = StateWaypointsMenu::instanceObj.zInput.getFloat();
+        StateWaypointsMenu::instanceObj.editIterator->position.w = StateWaypointsMenu::instanceObj.wInput.getFloat();
+        StateWaypointsMenu::instanceObj.editIterator->name = StateWaypointsMenu::instanceObj.nameInput.text;
+    }
+    else
+    {
+        Waypoint newWP = Waypoint{};
+
+        newWP.position.x = StateWaypointsMenu::instanceObj.xInput.getFloat();
+        newWP.position.y = StateWaypointsMenu::instanceObj.yInput.getFloat();
+        newWP.position.z = StateWaypointsMenu::instanceObj.zInput.getFloat();
+        newWP.position.w = StateWaypointsMenu::instanceObj.wInput.getFloat();
+        newWP.name = StateWaypointsMenu::instanceObj.nameInput.text;
+
+        waypoints[curWorld].push_back(newWP);
+    }
+    StateWaypointsMenu::instanceObj.editing = false;
+    StateWaypointsMenu::instanceObj.createWaypointElems();
+    cancelBtnCallback(nullptr);
+}
+
+void StateWaypointsMenu::openCreateWaypointMenu(void* user)
+{
+    StateWaypointsMenu::instanceObj.ui = &StateWaypointsMenu::instanceObj.createUI;
+
+    StateWaypointsMenu::instanceObj.editing = user != nullptr;
+
+    if (StateWaypointsMenu::instanceObj.editing)
+    {
+        StateWaypointsMenu::instanceObj.editIterator = ((WaypointElement*)user)->it;
+        StateWaypointsMenu::instanceObj.windowTitle.setText("Waypoint Editing");
+        StateWaypointsMenu::instanceObj.createBtn.text = "Apply";
+        StateWaypointsMenu::instanceObj.xInput.text = std::format("{:.1f}", StateWaypointsMenu::instanceObj.editIterator->position.x);
+        StateWaypointsMenu::instanceObj.yInput.text = std::format("{:.1f}", StateWaypointsMenu::instanceObj.editIterator->position.y);
+        StateWaypointsMenu::instanceObj.zInput.text = std::format("{:.1f}", StateWaypointsMenu::instanceObj.editIterator->position.z);
+        StateWaypointsMenu::instanceObj.wInput.text = std::format("{:.1f}", StateWaypointsMenu::instanceObj.editIterator->position.w);
+        StateWaypointsMenu::instanceObj.nameInput.text = StateWaypointsMenu::instanceObj.editIterator->name;
+    }
+    else
+    {
+        StateWaypointsMenu::instanceObj.windowTitle.setText("Waypoint Creation");
+        StateWaypointsMenu::instanceObj.createBtn.text = "Create";
+        StateWaypointsMenu::instanceObj.xInput.text = std::format("{:.1f}", StateGame::instanceObj->player.pos.x);
+        StateWaypointsMenu::instanceObj.yInput.text = std::format("{:.1f}", StateGame::instanceObj->player.pos.y);
+        StateWaypointsMenu::instanceObj.zInput.text = std::format("{:.1f}", StateGame::instanceObj->player.pos.z);
+        StateWaypointsMenu::instanceObj.wInput.text = std::format("{:.1f}", StateGame::instanceObj->player.pos.w);
+        StateWaypointsMenu::instanceObj.nameInput.text = "";
+    }
 }
 
 // thanks mashpoe for giving me this very cool thingy which you need to make some UI things work
@@ -112,7 +189,11 @@ void StateWaypointsMenu::init(StateManager& s)
         createWaypointBtn.offsetY(-10);
         createWaypointBtn.alignY(ALIGN_BOTTOM);
         createWaypointBtn.text = "Create";
-        createWaypointBtn.callback = [](void* s) { StateWaypointsMenu::instanceObj.openCreateWaypointMenu(); };
+        createWaypointBtn.callback = [](void* u) 
+            { 
+                StateWaypointsMenu::instanceObj.editing = false;
+                openCreateWaypointMenu(u); 
+            };
         mainUI.addElement(&createWaypointBtn);
 
         closeBtn = Button{};
@@ -138,30 +219,123 @@ void StateWaypointsMenu::init(StateManager& s)
         createBox.alignX(ALIGN_CENTER_X);
         createBox.alignY(ALIGN_CENTER_Y);
         createBox.scrollStep = 32;
-        createBox.width = 200;
-        createBox.height = 170;
+        createBox.width = 400;
+        createBox.height = 320;
         createBox.parent = &createUI;
         createUI.addElement(&createBox);
 
-        title = Text{};
-        title.alignX(ALIGN_CENTER_X);
-        title.offsetY(8);
-        title.size = 2;
-        title.shadow = true;
-        createBox.addElement(&title);
+        windowTitle = Text{};
+        windowTitle.alignX(ALIGN_CENTER_X);
+        windowTitle.alignY(ALIGN_CENTER_Y);
+        windowTitle.offsetY(-320 / 2 - 20);
+        windowTitle.size = 2;
+        windowTitle.shadow = true;
+        windowTitle.setText("Waypoint Creation");
+        createUI.addElement(&windowTitle);
+
+        nameTitle = Text{};
+        nameTitle.alignX(ALIGN_CENTER_X);
+        nameTitle.offsetY(10);
+        nameTitle.size = 2;
+        nameTitle.shadow = true;
+        nameTitle.setText("Name");
+        createBox.addElement(&nameTitle);
         
         nameInput = TextInput{};
         nameInput.alignX(ALIGN_CENTER_X);
         nameInput.offsetY(30);
+        nameInput.width = 250;
         createBox.addElement(&nameInput);
 
-        xInput = NumberInput("X", true);
+        xTitle = Text{};
+        xTitle.alignX(ALIGN_CENTER_X);
+        xTitle.shadow = true;
+        xTitle.size = 2;
+        xTitle.setText("X:");
+        xTitle.offsetX(-150 / 2 - 24);
+        xTitle.offsetY(110);
+        createBox.addElement(&xTitle);
+
+        xInput = NumberInput(true);
         xInput.alignX(ALIGN_CENTER_X);
-        xInput.offsetY(80);
-        xInput.minValue = -100000;
-        xInput.maxValue = 100000;
+        xInput.offsetY(100);
+        xInput.minValue = -1000000;
+        xInput.maxValue = 1000000;
         xInput.text = std::format("{:.1f}", StateGame::instanceObj->player.pos.x);
         createBox.addElement(&xInput);
+
+        yTitle = Text{};
+        yTitle.alignX(ALIGN_CENTER_X);
+        yTitle.shadow = true;
+        yTitle.size = 2;
+        yTitle.setText("Y:");
+        yTitle.offsetX(-150 / 2 - 24);
+        yTitle.offsetY(160);
+        createBox.addElement(&yTitle);
+
+        yInput = NumberInput(true);
+        yInput.alignX(ALIGN_CENTER_X);
+        yInput.offsetY(150);
+        yInput.minValue = -1000000;
+        yInput.maxValue = 1000000;
+        yInput.text = std::format("{:.1f}", StateGame::instanceObj->player.pos.y);
+        createBox.addElement(&yInput);
+
+        zTitle = Text{};
+        zTitle.alignX(ALIGN_CENTER_X);
+        zTitle.shadow = true;
+        zTitle.size = 2;
+        zTitle.setText("Z:");
+        zTitle.offsetX(-150 / 2 - 24);
+        zTitle.offsetY(210);
+        createBox.addElement(&zTitle);
+
+        zInput = NumberInput(true);
+        zInput.alignX(ALIGN_CENTER_X);
+        zInput.offsetY(200);
+        zInput.minValue = -1000000;
+        zInput.maxValue = 1000000;
+        zInput.text = std::format("{:.1f}", StateGame::instanceObj->player.pos.z);
+        createBox.addElement(&zInput);
+
+        wTitle = Text{};
+        wTitle.alignX(ALIGN_CENTER_X);
+        wTitle.shadow = true;
+        wTitle.size = 2;
+        wTitle.setText("W:");
+        wTitle.offsetX(-150 / 2 - 24);
+        wTitle.offsetY(260);
+        createBox.addElement(&wTitle);
+
+        wInput = NumberInput(true);
+        wInput.alignX(ALIGN_CENTER_X);
+        wInput.offsetY(250);
+        wInput.minValue = -1000000;
+        wInput.maxValue = 1000000;
+        wInput.text = std::format("{:.1f}", StateGame::instanceObj->player.pos.w);
+        createBox.addElement(&wInput);
+
+        createBtn = Button{};
+        createBtn.text = "Create";
+        createBtn.width = 175;
+        createBtn.height = 40;
+        createBtn.alignX(ALIGN_CENTER_X);
+        createBtn.alignY(ALIGN_CENTER_Y);
+        createBtn.offsetY(320 / 2 + 25);
+        createBtn.offsetX(-400 / 2 + createBtn.width / 2 + 10);
+        createBtn.callback = createWaypointCallback;
+        createUI.addElement(&createBtn);
+
+        cancelBtn = Button{};
+        cancelBtn.text = "Cancel";
+        cancelBtn.width = 175;
+        cancelBtn.height = 40;
+        cancelBtn.alignX(ALIGN_CENTER_X);
+        cancelBtn.alignY(ALIGN_CENTER_Y);
+        cancelBtn.offsetY(320 / 2 + 25);
+        cancelBtn.offsetX(400 / 2 - cancelBtn.width / 2 - 10);
+        cancelBtn.callback = cancelBtnCallback;
+        createUI.addElement(&cancelBtn);
     }
 
     ui = &mainUI;
@@ -273,15 +447,19 @@ void StateWaypointsMenu::createWaypointElems()
     if (!StateWaypointsMenu::waypoints.contains(StateWaypointsMenu::curWorld)) return;
 
     int i = 0;
-    for (auto& wp : StateWaypointsMenu::waypoints[StateWaypointsMenu::curWorld])
+    for (std::vector<Waypoint>::iterator it = StateWaypointsMenu::waypoints[StateWaypointsMenu::curWorld].begin(); 
+        it != StateWaypointsMenu::waypoints[StateWaypointsMenu::curWorld].end(); 
+        it++)
     {
         WaypointElement* wpEl = new WaypointElement();
-        wpEl->coordsText.setText(std::format("X:{:.1f} Y:{:.1f} Z:{:.1f} W:{:.1f}", wp.position.x, wp.position.y, wp.position.z, wp.position.w));
-        wpEl->nameText.setText(wp.name);
+        wpEl->coordsText.setText(std::format("X:{:.1f} Y:{:.1f} Z:{:.1f} W:{:.1f}", it->position.x, it->position.y, it->position.z, it->position.w));
+        wpEl->nameText.setText(it->name);
+        wpEl->it = it;
 
-        wpEl->removeBtn.user = wpEl;
-        wpEl->editBtn.user = wpEl;
-        wpEl->user = wpEl;
+        wpEl->removeBtn.user = wpEl->editBtn.user = wpEl;
+
+        wpEl->removeBtn.callback = removeWaypointCallback;
+        wpEl->editBtn.callback = openCreateWaypointMenu;
 
         wpEl->offsetX(8);
         wpEl->offsetY(8 + i * 40);

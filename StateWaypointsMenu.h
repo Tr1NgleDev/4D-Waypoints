@@ -74,6 +74,8 @@ public:
     Interface mainUI;
     Interface createUI;
     Interface* ui;
+    bool editing = false;
+    std::vector<Waypoint>::iterator editIterator;
 
     ContentBox box;
     Button createWaypointBtn;
@@ -81,21 +83,31 @@ public:
 
     ContentBox createBox;
 
-    Text title;
+    Text windowTitle;
+
+    Text nameTitle;
     TextInput nameInput;
 
+    Text xTitle;
     NumberInput xInput;
+    Text yTitle;
     NumberInput yInput;
+    Text zTitle;
     NumberInput zInput;
+    Text wTitle;
     NumberInput wInput;
 
     Button createBtn;
-    Button closeBtn2;
+    Button cancelBtn;
 
     StateWaypointsMenu() {}
 
     static void closeBtnCallback(void* user);
-    void openCreateWaypointMenu();
+    static void cancelBtnCallback(void* user);
+    static void openCreateWaypointMenu(void* user);
+    static void removeWaypointCallback(void* user);
+    static void createWaypointCallback(void* user);
+    static void saveWaypoints();
 
     void updateProjection(const glm::ivec2& size, const glm::ivec2& translate2D);
 

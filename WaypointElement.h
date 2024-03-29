@@ -7,9 +7,11 @@ using namespace fdm::gui;
 
 #include "ImgButton.h"
 
+struct Waypoint;
 class WaypointElement : public Button
 {
 public:
+	std::vector<Waypoint>::iterator it;
 	Text nameText;
 	Text coordsText;
 	ImgButton removeBtn;
